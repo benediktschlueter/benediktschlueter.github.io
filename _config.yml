@@ -99,7 +99,7 @@ analytics:
 author:
   name             : "Benedikt Schlüter"
   avatar           : # path of avatar image, e.g. "/assets/images/bio-photo.jpg"
-  bio              : "Webdeveloper"
+  bio              : "Freelance Developer Mobile | Web | CoreMedia"
   location         : "Hamburg, Germany"
   email            :
   uri              :
@@ -110,13 +110,13 @@ author:
   flickr           :
   facebook         :
   foursquare       :
-  github           :
+  github           : "benediktschlueter"
   gitlab           :
   google_plus      :
   keybase          :
   instagram        :
   lastfm           :
-  linkedin         : # "john-doe-12345678" (the last part of your profile url, e.g. https://www.linkedin.com/in/john-doe-12345678)
+  linkedin         : "benedikt-schlüter-999b1047" # "john-doe-12345678" (the last part of your profile url, e.g. https://www.linkedin.com/in/john-doe-12345678)
   pinterest        :
   soundcloud       :
   stackoverflow    : # "123456/username" (the last part of your profile url, e.g. https://stackoverflow.com/users/123456/username)
@@ -125,7 +125,7 @@ author:
   twitter          :
   vine             :
   weibo            :
-  xing             : "https://www.xing.com/profile/Benedikt_Schlueter2"
+  xing             : "Benedikt_Schlueter2"
   youtube          : # "https://youtube.com/c/MichaelRoseDesign"
 
 
