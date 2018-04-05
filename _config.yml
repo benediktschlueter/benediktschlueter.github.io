@@ -98,7 +98,7 @@ analytics:
 # Site Author
 author:
   name             : "Benedikt Schlüter"
-  avatar           : # path of avatar image, e.g. "/assets/images/bio-photo.jpg"
+  avatar           : "/assets/images/bene_und_flower.jpg"
   bio              : "Freelance Developer Mobile | Web | CoreMedia"
   location         : "Hamburg, Germany"
   email            :
