@@ -97,10 +97,10 @@ analytics:
 
 # Site Author
 author:
-  name             : "Your Name"
+  name             : "Benedikt Schlüter"
   avatar           : # path of avatar image, e.g. "/assets/images/bio-photo.jpg"
-  bio              : "I am an amazing person."
-  location         : "Somewhere"
+  bio              : "Webdeveloper"
+  location         : "Hamburg, Germany"
   email            :
   uri              :
   home             : # null (default), "absolute or relative url to link to author home"
@@ -125,7 +125,7 @@ author:
   twitter          :
   vine             :
   weibo            :
-  xing             :
+  xing             : "https://www.xing.com/profile/Benedikt_Schlueter2"
   youtube          : # "https://youtube.com/c/MichaelRoseDesign"
 
 
