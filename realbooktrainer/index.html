@@ -1,0 +1,916 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PlayReal</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #0d0d0d;
+      color: #fff;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      overflow-x: hidden;
+      padding: 16px;
+      gap: 10px;
+    }
+
+    /* ── MIDI status badge ───────────────────────────────────────────── */
+    #midi-status {
+      position: fixed;
+      top: 14px; right: 18px;
+      font-size: 0.8rem;
+      padding: 5px 14px;
+      border-radius: 20px;
+      background: rgba(200,50,50,0.18);
+      color: #e55;
+      border: 1px solid rgba(200,50,50,0.3);
+      transition: all 0.3s;
+    }
+    #midi-status.connected {
+      background: rgba(34,200,120,0.18);
+      color: #2dc87a;
+      border-color: rgba(34,200,120,0.35);
+    }
+
+    /* ── Song title ──────────────────────────────────────────────────── */
+    #song-title {
+      font-size: 0.95rem;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: #555;
+    }
+
+    /* ── Progress line ───────────────────────────────────────────────── */
+    #progress {
+      font-size: 0.9rem;
+      color: #444;
+      letter-spacing: 1px;
+    }
+
+    /* ── Feedback ────────────────────────────────────────────────────── */
+    #feedback {
+      font-size: clamp(1.8rem, 5vw, 2.6rem);
+      font-weight: 700;
+      min-height: 3rem;
+      text-align: center;
+    }
+    #feedback.correct { color: #22cc77; }
+    #feedback.wrong   { color: #ee3333; }
+    #feedback.partial { color: #aaa; }
+
+    /* ── Nav buttons ─────────────────────────────────────────────────── */
+    #nav-buttons {
+      display: flex;
+      gap: 12px;
+      margin-top: 4px;
+    }
+    .nav-btn {
+      background: rgba(255,255,255,0.07);
+      color: #bbb;
+      border: 1px solid rgba(255,255,255,0.15);
+      padding: 8px 22px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.9rem;
+      transition: background 0.15s;
+    }
+    .nav-btn:hover { background: rgba(255,255,255,0.14); color: #fff; }
+
+    /* ── Hint for no MIDI ────────────────────────────────────────────── */
+    #keyboard-hint {
+      font-size: 0.75rem;
+      color: #333;
+      text-align: center;
+      margin-top: -4px;
+    }
+
+    /* ── Upload overlay ──────────────────────────────────────────────── */
+    #upload-overlay {
+      position: fixed;
+      inset: 0;
+      background: #0d0d0d;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+    }
+    #upload-card {
+      text-align: center;
+      max-width: 420px;
+      width: 90%;
+      padding: 24px;
+    }
+    #upload-card h1 {
+      font-size: 2.4rem;
+      font-weight: 900;
+      margin-bottom: 6px;
+      letter-spacing: -1px;
+    }
+    #upload-card p {
+      color: #666;
+      font-size: 0.9rem;
+      margin-bottom: 24px;
+    }
+    #drop-zone {
+      border: 2px dashed #333;
+      border-radius: 14px;
+      padding: 44px 20px;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+    }
+    #drop-zone:hover, #drop-zone.dragover {
+      border-color: #3399ff;
+      background: rgba(51,153,255,0.04);
+    }
+    #drop-zone input[type=file] { display: none; }
+    #drop-icon  { font-size: 2.8rem; margin-bottom: 10px; }
+    #drop-text  { color: #666; font-size: 0.9rem; }
+    #drop-hint  { color: #444; font-size: 0.75rem; margin-top: 6px; }
+    #upload-error { color: #ee4444; margin-top: 14px; min-height: 1.4em; font-size: 0.88rem; }
+    #upload-progress { color: #3399ff; margin-top: 14px; min-height: 1.4em; font-size: 0.88rem; }
+
+    /* ── Two-panel layout (active after PDF upload) ──────────────────────── */
+    body.game-active {
+      padding: 0;
+      gap: 0;
+      align-items: stretch;
+      justify-content: flex-start;
+      overflow: hidden;
+      height: 100vh;
+    }
+    #main-layout {
+      display: none;
+      flex: 1;
+      min-height: 0;
+      width: 100%;
+    }
+    body.game-active #main-layout {
+      display: flex;
+      flex-direction: row;
+    }
+
+    /* ── Left: full PDF thumbnail ─────────────────────────────────────── */
+    #pdf-panel {
+      flex: 0 0 23%;
+      background: #111;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 6px;
+      overflow: hidden;
+      border-right: 1px solid #1e1e1e;
+    }
+    #pdf-thumb {
+      display: block;
+      max-width: 100%;
+      max-height: 100%;
+    }
+
+    /* ── Right: game panel ────────────────────────────────────────────── */
+    #game-panel {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      gap: 6px;
+      padding: 8px 10px;
+      overflow: hidden;
+      min-width: 0;
+    }
+
+    /* ── Zoomed chord view (cropped PDF section) ──────────────────────── */
+    #row-strip {
+      display: block;
+      border-radius: 4px;
+      background: #fff;
+      /* Fixed share of panel height for the row overview — never grows past
+         35 % so the big zoom canvas still gets the majority of the space.  */
+      flex: 0 0 auto;
+      max-height: 35%;
+      max-width: 100%;
+      width: 100%;
+    }
+    /* Wrapper takes the available flex height; the canvas inside it stays at
+       its JS-computed size (which preserves the PDF crop aspect ratio). */
+    #zoom-wrap {
+      flex: 1;
+      min-height: 0;
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+    #chord-zoom {
+      display: block;
+      border-radius: 4px;
+      background: #fff;
+      /* Canvas is sized purely by JS; CSS must not stretch it. */
+      max-width: 100%;
+      max-height: 100%;
+    }
+  </style>
+</head>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<body>
+
+  <!-- PDF upload overlay (shown until a PDF is loaded) -->
+  <div id="upload-overlay">
+    <div id="upload-card">
+      <h1>PlayReal</h1>
+      <p>Upload an iReal Pro PDF chord sheet to start practicing</p>
+      <div id="drop-zone">
+        <div id="drop-icon">🎵</div>
+        <div id="drop-text">Drop PDF here or click to browse</div>
+        <div id="drop-hint">Supports iReal Pro chord sheet PDFs</div>
+        <input type="file" id="pdf-input" accept=".pdf" />
+      </div>
+      <div id="upload-error"></div>
+      <div id="upload-progress"></div>
+    </div>
+  </div>
+
+  <!-- MIDI status badge (always visible, fixed position) -->
+  <div id="midi-status">⚡ No MIDI</div>
+
+  <!-- Two-panel layout — hidden until a PDF is parsed successfully -->
+  <div id="main-layout">
+
+    <!-- Left panel: full PDF page scaled to fit, with red frame on current bar -->
+    <div id="pdf-panel">
+      <canvas id="pdf-thumb"></canvas>
+    </div>
+
+    <!-- Right panel: game controls -->
+    <div id="game-panel">
+      <div id="song-title">🎵 PlayReal</div>
+      <div id="progress"></div>
+
+      <!-- Row overview: the full row of bars containing the current chord -->
+      <canvas id="row-strip"></canvas>
+
+      <!-- Zoomed crop of the current bar from the PDF -->
+      <div id="zoom-wrap">
+        <canvas id="chord-zoom"></canvas>
+      </div>
+
+      <div id="feedback"></div>
+
+      <div id="nav-buttons">
+        <button class="nav-btn" id="prevBtn">◀ Prev</button>
+        <button class="nav-btn" id="nextBtn">Next ▶</button>
+      </div>
+
+      <div id="keyboard-hint">Connect a MIDI keyboard and press the chord keys</div>
+    </div><!-- #game-panel -->
+
+  </div><!-- #main-layout -->
+
+<script>
+'use strict';
+
+// ── PDF.js worker ─────────────────────────────────────────────────────────────
+const PDFJS_WORKER = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+// ── PDF parsing constants ─────────────────────────────────────────────────────
+const RENDER_SCALE  = 3;
+// C3–C5 white and black MIDI numbers
+const WHITE_MIDI = [48,50,52,53,55,57,59,60,62,64,65,67,69,71,72];
+const BLACK_MIDI = [49,51,54,56,58,61,63,66,68,70];
+const BLACK_POS  = [.5,1.5,3.5,4.5,5.5,7.5,8.5,10.5,11.5,12.5]; // white-key units
+
+const FLAT_NAMES = ['C','D♭','D','E♭','E','F','G♭','G','A♭','A','B♭','B'];
+
+function pcName(midi) { return FLAT_NAMES[((midi % 12) + 12) % 12]; }
+
+// ── Canvas pixel-cluster finder ───────────────────────────────────────────────
+function findColorClusters(imgData, tr, tg, tb, tolerance, minPx) {
+  const {data, width, height} = imgData;
+  const visited = new Uint8Array(width * height);
+  const result  = [];
+
+  for (let y=0; y<height; y++) {
+    for (let x=0; x<width; x++) {
+      const pi = y*width+x;
+      if (visited[pi]) continue;
+      const di = pi*4;
+      if (Math.abs(data[di  ]-tr)>tolerance ||
+          Math.abs(data[di+1]-tg)>tolerance ||
+          Math.abs(data[di+2]-tb)>tolerance) continue;
+
+      const stack=[pi]; visited[pi]=1;
+      let sumX=0, sumY=0, minX=width, maxX=0, minY=height, maxY=0, count=0;
+      while (stack.length) {
+        const p=stack.pop(), px=p%width, py=Math.floor(p/width);
+        sumX+=px; sumY+=py; count++;
+        if (px<minX) minX=px; if (px>maxX) maxX=px;
+        if (py<minY) minY=py; if (py>maxY) maxY=py;
+        for (const [dx,dy] of [[-1,0],[1,0],[0,-1],[0,1]]) {
+          const nx=px+dx, ny=py+dy;
+          if (nx<0||nx>=width||ny<0||ny>=height) continue;
+          const np=ny*width+nx;
+          if (visited[np]) continue;
+          const nd=np*4;
+          if (Math.abs(data[nd  ]-tr)>tolerance ||
+              Math.abs(data[nd+1]-tg)>tolerance ||
+              Math.abs(data[nd+2]-tb)>tolerance) continue;
+          visited[np]=1; stack.push(np);
+        }
+      }
+      if (count >= minPx) result.push({cx:sumX/count, cy:sumY/count, w:maxX-minX, h:maxY-minY});
+    }
+  }
+  return result;
+}
+
+// ── Map one circle's x-position to a MIDI note ───────────────────────────────
+function circleToMidi(cx, colCx, grayW, isBlack) {
+  // kbdW > grayW: the actual keyboard extends ~6.8 % beyond the gray guide bar on each side
+  const kbdW = grayW * 1.068;
+  const kx1  = colCx - grayW/2;
+  if (!isBlack) {
+    return WHITE_MIDI[Math.max(0, Math.min(14, Math.floor((cx-kx1)*15/kbdW)))];
+  }
+  // Black-key circles sit ~3.2 % of kbdW to the right of the midpoint between their
+  // neighbouring white keys (matches the physical piano key geometry in iReal Pro SVGs)
+  const relX = (cx - (kx1 + kbdW*0.032)) / kbdW;
+  let best=0, bestDist=Infinity;
+  for (let i=0; i<BLACK_POS.length; i++) {
+    const d = Math.abs(relX - BLACK_POS[i]/15);
+    if (d<bestDist) { bestDist=d; best=i; }
+  }
+  return BLACK_MIDI[best];
+}
+
+// ── Parse an uploaded iReal Pro PDF and return [{main,ext,slash,voicing}] ─────
+// iReal Pro PDFs lay out chords in a grid of bars (typically 4 per row), separated
+// by vertical bar lines.  Each bar cell contains:
+//   • Top area   — one or two chord-name labels side by side (text/vector outlines)
+//   • Lower area — one or two piano-keyboard voicing diagrams stacked vertically
+//     (a bar may hold 1 chord with a full-height diagram, or 2 chords with two
+//      half-height diagrams stacked, i.e. 2–3 visual lines per bar)
+// Not every cell in the grid is filled; empty cells produce no chord entries.
+async function parsePDFFile(file) {
+  pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER;
+  const pdf  = await pdfjsLib.getDocument({data: await file.arrayBuffer()}).promise;
+  const page = await pdf.getPage(1);
+  const vp   = page.getViewport({scale: RENDER_SCALE});
+  const cvs  = document.createElement('canvas');
+  cvs.width  = vp.width;  cvs.height = vp.height;
+  await page.render({canvasContext: cvs.getContext('2d'), viewport: vp}).promise;
+  const img  = cvs.getContext('2d').getImageData(0, 0, cvs.width, cvs.height);
+
+  // ── Step 1: Locate bar columns via keyboard diagram backgrounds ───────────
+  // iReal Pro draws a neutral-gray (#cccccc) rectangle behind each chord keyboard
+  // diagram.  These rectangles reveal the column centres and the keyboard width.
+  // All pixel-count thresholds scale with RENDER_SCALE so they work at any scale.
+  const SC       = RENDER_SCALE / 2;   // scale factor relative to the 2× calibration baseline
+  const grayBars = findColorClusters(img, 0xcc,0xcc,0xcc, 15, Math.round(100 * SC * SC))
+    .filter(c => c.w > Math.round(100 * SC));  // keep only wide horizontal bars
+
+  let grayW  = Math.round(206 * SC);
+  let grayH  = Math.round(grayW / 3);  // keyboard diagram height ≈ width / 3
+  let colCxs = [];
+
+  if (grayBars.length >= 2) {
+    // Use the MAXIMUM detected width — partial clusters (cut by circles) pull the
+    // mean down, but the widest fragment closely approximates the true bar width.
+    grayW = grayBars.reduce((mx, b) => Math.max(mx, b.w), 0);
+    // Estimate height from the detected fragments; use max for same reason.
+    const hMax = grayBars.reduce((mx, b) => Math.max(mx, b.h), 0);
+    if (hMax > 10) grayH = hMax;
+    // Deduplicate column x-centres — merge values within SC*5 px of each other
+    const DEDUP = Math.round(5 * SC);
+    const rawCxs = [...new Set(grayBars.map(b => Math.round(b.cx)))].sort((a,b)=>a-b);
+    rawCxs.forEach(cx => {
+      if (!colCxs.length || cx - colCxs[colCxs.length-1] > DEDUP) colCxs.push(cx);
+    });
+  }
+  if (colCxs.length < 2) {
+    // Fallback: assume 4 equal columns (standard iReal Pro layout).
+    // 0.82 ~= (keyboard diagram width) / (column pitch).
+    const step = Math.round(vp.width/4);
+    colCxs = [0,1,2,3].map(i => Math.round(step*(i+0.5)));
+    grayW  = Math.round(step * 0.82);
+  }
+
+  // ── Step 2: Build explicit bar-cell x-boundaries ─────────────────────────
+  // The bar grid has one column per detected centre.  Column spacing gives the
+  // bar width; each cell spans [colCx - halfSpacing, colCx + halfSpacing).
+  // Circles are assigned to cells by x-range — not just to the nearest centre —
+  // so that circles near a bar line always land in the correct bar.
+  const colSpacing = colCxs.length >= 2
+    ? (colCxs[colCxs.length-1] - colCxs[0]) / (colCxs.length - 1)
+    : Math.round(grayW * 1.22); // fallback: bar width ~= 1.22 * keyboard width
+
+  const barCells = colCxs.map(cx => ({cx, x1: cx - colSpacing/2, x2: cx + colSpacing/2}));
+
+  // Assign a circle to its bar cell by x-range; fall back to nearest centre.
+  const assignCell = cx => {
+    for (const c of barCells) if (cx >= c.x1 && cx < c.x2) return c;
+    return barCells.reduce((b,c) => Math.abs(cx-c.cx)<Math.abs(cx-b.cx)?c:b, barCells[0]);
+  };
+
+  // ── Step 3: Extract chord-name text from the PDF text layer ──────────────
+  // iReal Pro PDFs store the chord name(s) for each bar as text items in the
+  // first visual line of the bar cell, above the piano-keyboard diagrams.
+  // Each text item has a position in PDF coordinate space (origin at bottom-
+  // left); vp.convertToViewportPoint converts it to canvas coordinates.
+  //
+  // For a single-chord bar the one text item in the cell names the chord.
+  // For a double-chord bar two text items sit side-by-side in that first line
+  // (sorted left-to-right by x): the leftmost names the top diagram; the
+  // rightmost names the bottom diagram.
+  //
+  // If no text is found (e.g. chord symbols rendered as vector path outlines
+  // rather than a font), the chord entry will show '?' as its name.
+  const textContent = await page.getTextContent();
+  const cellTexts   = new Map();  // cellCx → [{str, cx, cy}]
+  for (const item of textContent.items) {
+    const str = (item.str || '').trim();
+    if (!str) continue;
+    const [tx, ty] = vp.convertToViewportPoint(item.transform[4], item.transform[5]);
+    const cell = assignCell(tx);
+    if (!cellTexts.has(cell.cx)) cellTexts.set(cell.cx, []);
+    cellTexts.get(cell.cx).push({str, cx: tx, cy: ty});
+  }
+
+  // ── Step 4: Find coloured note-indicator circles ──────────────────────────
+  const blueCircles   = findColorClusters(img, 0x1e,0x1e,0x8c, 30, Math.round(30 * SC * SC));
+  const purpleCircles = findColorClusters(img, 0xbf,0xbf,0xde, 15, Math.round(20 * SC * SC));
+
+  // ── Step 5: Group blue circles into per-bar chord diagrams ───────────────
+  // Within a bar cell, the piano area contains one diagram (single chord) or two
+  // stacked half-height diagrams (double chord, occupying lines 2 and 3 of the
+  // bar).  Blue circles in the same diagram share a y-position within ~20 px.
+  // A tight y-bucket keeps the two stacked diagrams apart.
+  const BUCKET = Math.round(12 * SC);
+  const MERGE  = Math.round(20 * SC);
+
+  const diagMap = new Map();  // "colCx,cyBucket" → {col, cyBucket, sumCy, cntCy, midis:[]}
+
+  for (const c of blueCircles) {
+    const cell = assignCell(c.cx);
+    const midi = circleToMidi(c.cx, cell.cx, grayW, false);
+    const cyB  = Math.round(c.cy / BUCKET) * BUCKET;
+    let foundKey = null;
+    for (const [k, e] of diagMap) {
+      if (e.col === cell.cx && Math.abs(e.cyBucket - cyB) <= MERGE) { foundKey=k; break; }
+    }
+    if (foundKey) {
+      const e = diagMap.get(foundKey);
+      e.sumCy += c.cy; e.cntCy++; e.midis.push(midi);
+    } else {
+      const k = `${cell.cx},${cyB}`;
+      diagMap.set(k, {col:cell.cx, cyBucket:cyB, sumCy:c.cy, cntCy:1, midis:[midi]});
+    }
+  }
+
+  // ── Step 5: Assign black-key circles to their diagram ────────────────────
+  // Each purple circle is assigned to the nearest blue-circle group in the same
+  // bar column.  The two-pass approach ensures that a black-key circle positioned
+  // midway between two stacked diagrams lands in the correct group.
+  for (const c of purpleCircles) {
+    const cell = assignCell(c.cx);
+    const midi = circleToMidi(c.cx, cell.cx, grayW, true);
+    let bestKey=null, bestDist=Infinity;
+    for (const [k, e] of diagMap) {
+      if (e.col !== cell.cx) continue;
+      const d = Math.abs(c.cy - e.sumCy/e.cntCy);
+      if (d < bestDist) { bestDist=d; bestKey=k; }
+    }
+    if (bestKey) diagMap.get(bestKey).midis.push(midi);
+  }
+
+  // ── Step 6: Build diagram objects ────────────────────────────────────────
+  // Skip groups with fewer than 2 distinct notes — these are rendering artefacts
+  // or noise, not real chord diagrams.  Empty bar cells produce no entry here.
+  let diagrams = [];
+  for (const e of diagMap.values()) {
+    const voicing = [...new Set(e.midis)].sort((a,b)=>a-b);
+    if (voicing.length < 2) continue;
+    diagrams.push({col: e.col, cy: e.sumCy/e.cntCy, voicing});
+  }
+  diagrams.sort((a,b) => a.cy - b.cy);
+
+  // ── Step 7: Reading-order sort ────────────────────────────────────────────
+  // A gap larger than rowGapMin between consecutive diagram y-centres signals a
+  // new row of bars.  The threshold is proportional to the render scale so it
+  // works regardless of how the PDF was rendered.
+  // Within each row-band, bars with two stacked diagrams (double-chord cells) are
+  // interleaved: col0_top, col0_bottom, col1_top, col1_bottom, …
+  const rowGapMin = Math.round(70 * SC);
+
+  const bands = diagrams.length ? [[diagrams[0]]] : [];
+  for (let i=1; i<diagrams.length; i++) {
+    const last = bands[bands.length-1];
+    if (diagrams[i].cy - last[last.length-1].cy > rowGapMin) bands.push([]);
+    bands[bands.length-1].push(diagrams[i]);
+  }
+
+  const ordered = [];
+  for (const band of bands) {
+    const byCol = new Map();
+    for (const d of band) {
+      if (!byCol.has(d.col)) byCol.set(d.col, []);
+      byCol.get(d.col).push(d);
+    }
+    const isDouble = [...byCol.values()].some(g => g.length > 1);
+    if (isDouble) {
+      // Double-chord bar: interleave columns (col_top, col_bottom per column)
+      for (const col of [...byCol.keys()].sort((a,b)=>a-b)) {
+        for (const d of byCol.get(col).sort((a,b)=>a.cy-b.cy)) ordered.push(d);
+      }
+    } else {
+      for (const d of band.sort((a,b)=>a.col-b.col)) ordered.push(d);
+    }
+  }
+
+  if (ordered.length === 0) throw new Error('No chord diagrams found in this PDF.');
+
+  // ── Step 8: Assign chord names and canvas bounds ──────────────────────────
+  // Each chord gets:
+  //   • its name from the PDF text layer (leftmost text item for first/only chord,
+  //     rightmost for the second chord in a double-chord bar)
+  //   • pdfBounds {x1,y1,x2,y2} — the canvas-pixel region of that bar, used for
+  //     the left-panel red frame and the right-panel zoomed view
+  const colTopCy = new Map();
+  for (const d of ordered) {
+    if (!colTopCy.has(d.col) || d.cy < colTopCy.get(d.col)) colTopCy.set(d.col, d.cy);
+  }
+  const colSeen = new Map();
+
+  const chords = ordered.map(d => {
+    const seen = colSeen.get(d.col) || 0;
+    colSeen.set(d.col, seen + 1);
+
+    // Text items above the first diagram in this cell, sorted left to right.
+    // A 5 px margin below the text baseline avoids capturing any text whose
+    // descenders overlap with the very top of the piano-diagram gray bar.
+    const topCy      = colTopCy.get(d.col);
+    const candidates = (cellTexts.get(d.col) || [])
+      .filter(t => t.cy < topCy - 5)
+      .sort((a, b) => a.cx - b.cx);
+
+    const picked    = seen < candidates.length ? candidates[seen] : null;
+    const chordStr  = picked ? picked.str : '?';
+
+    // Split slash chords (e.g. "Am/G") into root + bass parts.
+    const slashIdx  = chordStr.indexOf('/');
+    const main      = slashIdx >= 0 ? chordStr.slice(0, slashIdx) : chordStr;
+    const slash     = slashIdx >= 0 ? chordStr.slice(slashIdx) : '';  // e.g. '/G'
+
+    // Canvas bounds for the bar cell containing this diagram.
+    // x bounds are keyboard-width-based (small margin around the actual keyboard),
+    // not the full column-spacing span, to avoid wide blank margins on each side.
+    // y1 extends above the keyboard to include the chord-name text line;
+    // y2 adds a small margin below the bottom of the keyboard.
+    const pdfBounds = {
+      // 0.60 ≈ 0.50 (half gray-bar) + 10% left margin
+      x1: Math.max(0,          Math.round(d.col - grayW * 0.60)),
+      // 0.65 > 0.568 (keyboard right edge) + small right margin
+      x2: Math.min(cvs.width,  Math.round(d.col + grayW * 0.65)),
+      // 2.7 leaves enough room above the keyboard for the chord-name text
+      y1: Math.max(0,          Math.round(d.cy - grayH * 2.7)),
+      y2: Math.min(cvs.height, Math.round(d.cy + grayH * 0.8)),
+    };
+
+    return {main, ext: '', slash, voicing: d.voicing, pdfBounds,
+            diagCy: d.cy, colCx: d.col, grayW, grayH};
+  });
+
+  // ── Post-process: compute full-bar bounds covering all chords in the same bar ──
+  // Two chords belong to the same bar only if they share the same column x1 (same
+  // vertical stripe) AND their diagram centres are closer than rowGapMin — i.e., they
+  // are in the same row-band (the same criterion used when building bands above).
+  // This prevents chords from different rows (which have the same column x-positions)
+  // from being merged into one enormous tall barBounds.
+  for (const c of chords) {
+    let by1 = c.pdfBounds.y1, by2 = c.pdfBounds.y2;
+    for (const other of chords) {
+      if (other === c) continue;
+      // Same column (x1 within 10px) AND same row-band (diagCy within rowGapMin)
+      if (Math.abs(other.pdfBounds.x1 - c.pdfBounds.x1) < 10 &&
+          Math.abs(other.diagCy - c.diagCy) < rowGapMin) {
+        by1 = Math.min(by1, other.pdfBounds.y1);
+        by2 = Math.max(by2, other.pdfBounds.y2);
+      }
+    }
+    c.barBounds = {x1: c.pdfBounds.x1, x2: c.pdfBounds.x2, y1: by1, y2: by2};
+  }
+
+  return {chords, canvas: cvs};
+}
+
+// ── Map a MIDI note back to its canvas x-position (inverse of circleToMidi) ──
+function midiToCanvasX(midi, colCx, grayW) {
+  const kbdW = grayW * 1.068;
+  const kx1  = colCx - grayW / 2;
+  const wIdx = WHITE_MIDI.indexOf(midi);
+  if (wIdx >= 0) return kx1 + (wIdx + 0.5) * kbdW / 15;
+  const bIdx = BLACK_MIDI.indexOf(midi);
+  if (bIdx >= 0) return kx1 + kbdW * 0.032 + (BLACK_POS[bIdx] / 15) * kbdW;
+  return null;
+}
+
+// ── Timing constant ───────────────────────────────────────────────────────────
+const ADVANCE_DELAY_MS = 700;
+
+// ── Game state ────────────────────────────────────────────────────────────────
+let chords       = [];
+let currentIdx   = 0;
+let heldMidis    = new Set();
+let advanceTimer = null;
+let pdfCanvas    = null;   // full-page canvas retained for thumbnail + zoom views
+
+// ── PDF split-view rendering ──────────────────────────────────────────────────
+// Draws (a) the left-panel PDF thumbnail with a red frame around the current bar,
+// and (b) the right-panel zoomed crop of the whole bar — as large as the panel
+//         allows, with a red sub-frame on the active chord and coloured circles
+//         overlaid for held MIDI keys.
+function drawPdfViews(idx) {
+  if (!pdfCanvas) return;
+  const chord = chords[idx];
+  if (!chord || !chord.pdfBounds) return;
+  const b  = chord.pdfBounds;
+  // barBounds covers all chords in this bar column (same for single- and double-chord bars)
+  const bb = chord.barBounds || b;
+
+  // ── Left: full-page thumbnail ────────────────────────────────────────────
+  const thumbCvs = document.getElementById('pdf-thumb');
+  const panel    = document.getElementById('pdf-panel');
+  if (thumbCvs && panel) {
+    const panelW = panel.clientWidth  - 12;
+    const panelH = panel.clientHeight - 12;
+    if (panelW > 0 && panelH > 0) {
+      const scale = Math.min(panelW / pdfCanvas.width, panelH / pdfCanvas.height);
+      thumbCvs.width  = Math.round(pdfCanvas.width  * scale);
+      thumbCvs.height = Math.round(pdfCanvas.height * scale);
+      const tctx = thumbCvs.getContext('2d');
+      tctx.drawImage(pdfCanvas, 0, 0, thumbCvs.width, thumbCvs.height);
+      // Red highlight frame around the current chord in the left thumbnail
+      tctx.strokeStyle = '#ff2222';
+      tctx.lineWidth   = Math.max(2, Math.round(3 * scale));
+      tctx.shadowColor = 'rgba(255,0,0,0.5)';
+      tctx.shadowBlur  = Math.round(6 * scale);
+      tctx.strokeRect(
+        b.x1 * scale - 1, b.y1 * scale - 1,
+        (b.x2 - b.x1) * scale + 2, (b.y2 - b.y1) * scale + 2
+      );
+      tctx.shadowBlur = 0;
+    }
+  }
+
+  // ── Row strip: the full row of bars that contains the current chord ─────
+  const rowStripCvs = document.getElementById('row-strip');
+  if (rowStripCvs && chords.length > 0) {
+    // Row-band threshold — same constant used in parsePDF().
+    const rowGapMin = Math.round(70 * RENDER_SCALE / 2);
+    // Collect all chords in the same row-band as the current chord.
+    const rowChords = chords.filter(c =>
+      c.diagCy != null && Math.abs(c.diagCy - chord.diagCy) < rowGapMin
+    );
+    if (rowChords.length > 0) {
+      // Row region: full page width, y from topmost to bottommost chord bound.
+      const rowY1 = Math.max(0, Math.min(...rowChords.map(c => c.pdfBounds.y1)));
+      const rowY2 = Math.min(pdfCanvas.height, Math.max(...rowChords.map(c => c.pdfBounds.y2)));
+      const rowW  = pdfCanvas.width;
+      const rowH  = rowY2 - rowY1;
+      if (rowW > 0 && rowH > 0) {
+        const parentW   = rowStripCvs.parentElement ? rowStripCvs.parentElement.clientWidth - 20 : 400;
+        const stripMaxW = rowStripCvs.clientWidth  || parentW || 400;
+        const stripMaxH = rowStripCvs.clientHeight || Math.round(stripMaxW * rowH / rowW);
+        const rScale    = Math.min(stripMaxW / rowW, stripMaxH / rowH);
+        rowStripCvs.width  = Math.round(rowW * rScale);
+        rowStripCvs.height = Math.round(rowH * rScale);
+        const rctx = rowStripCvs.getContext('2d');
+        rctx.drawImage(pdfCanvas, 0, rowY1, rowW, rowH, 0, 0, rowStripCvs.width, rowStripCvs.height);
+        // Red frame around the current bar in the row strip
+        rctx.strokeStyle = '#ff2222';
+        rctx.lineWidth   = Math.max(2, Math.round(3 * rScale));
+        rctx.shadowColor = 'rgba(255,0,0,0.5)';
+        rctx.shadowBlur  = Math.round(6 * rScale);
+        rctx.strokeRect(
+          b.x1 * rScale - 1, (b.y1 - rowY1) * rScale - 1,
+          (b.x2 - b.x1) * rScale + 2, (b.y2 - b.y1) * rScale + 2
+        );
+        rctx.shadowBlur = 0;
+      }
+    }
+  }
+
+  // ── Right: zoomed bar crop — always shows the full bar ───────────────────
+  const zoomCvs   = document.getElementById('chord-zoom');
+  const zoomWrap  = document.getElementById('zoom-wrap');
+  const gamePanel = document.getElementById('game-panel');
+  if (zoomCvs && zoomWrap) {
+    const srcW = bb.x2 - bb.x1, srcH = bb.y2 - bb.y1;
+    if (srcW > 0 && srcH > 0) {
+      // Read available space from the wrapper (which holds the flex-1 space).
+      const maxW   = zoomWrap.clientWidth  || (gamePanel ? gamePanel.clientWidth  - 20 : 600);
+      const maxH   = zoomWrap.clientHeight || Math.max(300, (gamePanel ? gamePanel.clientHeight - 110 : 400));
+      const zScale = Math.min(maxW / srcW, maxH / srcH);
+      zoomCvs.width  = Math.round(srcW * zScale);
+      zoomCvs.height = Math.round(srcH * zScale);
+      const zctx = zoomCvs.getContext('2d');
+      zctx.drawImage(pdfCanvas, bb.x1, bb.y1, srcW, srcH, 0, 0, zoomCvs.width, zoomCvs.height);
+
+      // ── Red sub-frame around the active chord (only for double-chord bars) ──
+      if (bb.y1 !== b.y1 || bb.y2 !== b.y2) {
+        const fx = (b.x1 - bb.x1) * zScale;
+        const fy = (b.y1 - bb.y1) * zScale;
+        const fw = (b.x2 - b.x1) * zScale;
+        const fh = (b.y2 - b.y1) * zScale;
+        zctx.strokeStyle = '#ff2222';
+        // Scale stroke width proportionally to the zoom factor (3px at 1:1).
+        zctx.lineWidth   = Math.max(2, Math.round(3 * zScale));
+        zctx.shadowColor = 'rgba(255,0,0,0.5)';
+        zctx.shadowBlur  = 6;
+        zctx.strokeRect(fx - 1, fy - 1, fw + 2, fh + 2);
+        zctx.shadowBlur = 0;
+      }
+
+      // ── Overlay circles for held MIDI notes ───────────────────────────
+      if (heldMidis.size > 0 &&
+          chord.colCx != null && chord.diagCy != null &&
+          chord.grayW != null && chord.grayH  != null) {
+        const reqSet = new Set(chord.voicing);
+        // Radius ≈ 1/36 of keyboard width — matches the visual size of the
+        // iReal Pro note-indicator circles at this zoom level.
+        const KEY_CIRCLE_RATIO = 0.028;
+        const r = Math.max(5, Math.round(chord.grayW * zScale * KEY_CIRCLE_RATIO));
+        for (const midi of heldMidis) {
+          const cx = midiToCanvasX(midi, chord.colCx, chord.grayW);
+          if (cx == null) continue;
+          const zx = (cx - bb.x1) * zScale;
+          // Place circle at the y of the note indicators in the PDF diagram
+          const zy = (chord.diagCy - bb.y1) * zScale;
+          const isCorrect = reqSet.has(midi);
+          zctx.beginPath();
+          zctx.arc(zx, zy, r, 0, Math.PI * 2);
+          zctx.fillStyle   = isCorrect ? 'rgba(30,220,80,0.88)' : 'rgba(220,40,40,0.88)';
+          zctx.fill();
+          zctx.strokeStyle = BLACK_MIDI.includes(midi) ? '#000' : '#fff';
+          zctx.lineWidth   = 1.5;
+          zctx.stroke();
+        }
+      }
+    }
+  }
+}
+
+function showChord(idx) {
+  if (!chords.length) return;
+  document.getElementById('progress').textContent = 'Chord '+(idx+1)+' / '+chords.length;
+  clearFeedback();
+  // Draw PDF views in the next animation frame so panel sizes are available
+  requestAnimationFrame(() => drawPdfViews(idx));
+}
+
+function clearFeedback() {
+  const fb = document.getElementById('feedback');
+  fb.textContent=''; fb.className='';
+}
+function setFeedback(cls, text) {
+  const fb = document.getElementById('feedback');
+  fb.textContent=text; fb.className=cls;
+}
+
+function evaluate() {
+  if (!chords.length) return;
+  const chord = chords[currentIdx];
+  if (heldMidis.size === 0) { clearFeedback(); return; }
+
+  const reqSet     = new Set(chord.voicing);
+  const hasWrong   = [...heldMidis].some(m => !reqSet.has(m));
+  const allCorrect = [...reqSet].every(m => heldMidis.has(m));
+
+  drawPdfViews(currentIdx);
+
+  if (hasWrong) {
+    if (advanceTimer) { clearTimeout(advanceTimer); advanceTimer=null; }
+    setFeedback('wrong','✗ Wrong!');
+  } else if (allCorrect) {
+    setFeedback('correct','✓ Correct!');
+    if (!advanceTimer) {
+      advanceTimer = setTimeout(() => {
+        advanceTimer = null;
+        currentIdx   = (currentIdx+1) % chords.length;
+        heldMidis    = new Set();
+        showChord(currentIdx);
+      }, ADVANCE_DELAY_MS);
+    }
+  } else {
+    if (advanceTimer) { clearTimeout(advanceTimer); advanceTimer=null; }
+    clearFeedback();
+  }
+}
+
+// ── Web MIDI ──────────────────────────────────────────────────────────────────
+let midiAccess = null;
+
+function onMidiMessage(ev) {
+  const [status, note, vel] = ev.data;
+  const cmd = status & 0xf0;
+  if      (cmd===0x90 && vel>0) heldMidis.add(note);
+  else if (cmd===0x80 || (cmd===0x90 && vel===0)) heldMidis.delete(note);
+  else return;
+  evaluate();
+}
+
+function refreshMidi() {
+  let count=0;
+  if (midiAccess) midiAccess.inputs.forEach(inp => { inp.onmidimessage=onMidiMessage; count++; });
+  const el = document.getElementById('midi-status');
+  if (count>0) { el.textContent='🎹 MIDI: '+count+' device'+(count>1?'s':''); el.className='connected'; }
+  else         { el.textContent='⚡ No MIDI device'; el.className=''; }
+}
+
+function initMidi() {
+  if (!navigator.requestMIDIAccess) {
+    document.getElementById('midi-status').textContent='⚠ Web MIDI not supported'; return;
+  }
+  navigator.requestMIDIAccess({sysex:false})
+    .then(acc => { midiAccess=acc; refreshMidi(); acc.onstatechange=refreshMidi; })
+    .catch(() => { document.getElementById('midi-status').textContent='⚠ MIDI access denied'; });
+}
+
+// ── Navigation buttons ────────────────────────────────────────────────────────
+document.getElementById('prevBtn').addEventListener('click', () => {
+  if (!chords.length) return;
+  if (advanceTimer) { clearTimeout(advanceTimer); advanceTimer=null; }
+  heldMidis=new Set(); currentIdx=(currentIdx-1+chords.length)%chords.length; showChord(currentIdx);
+});
+document.getElementById('nextBtn').addEventListener('click', () => {
+  if (!chords.length) return;
+  if (advanceTimer) { clearTimeout(advanceTimer); advanceTimer=null; }
+  heldMidis=new Set(); currentIdx=(currentIdx+1)%chords.length; showChord(currentIdx);
+});
+
+// ── Upload overlay wiring ─────────────────────────────────────────────────────
+function setUploadError(msg) {
+  document.getElementById('upload-error').textContent    = msg;
+  document.getElementById('upload-progress').textContent = '';
+}
+function setUploadProgress(msg) {
+  document.getElementById('upload-progress').textContent = msg;
+  document.getElementById('upload-error').textContent    = '';
+}
+
+async function handlePDFFile(file) {
+  if (!file || !file.name.toLowerCase().endsWith('.pdf')) {
+    setUploadError('Please upload a PDF file.'); return;
+  }
+  setUploadProgress('⏳ Parsing PDF…');
+  try {
+    const {chords: parsed, canvas} = await parsePDFFile(file);
+    chords    = parsed;
+    pdfCanvas = canvas;
+    // Update song title from filename (convert to Title Case)
+    const raw   = file.name.replace(/\.pdf$/i,'').replace(/[-_]/g,' ');
+    const title = raw.replace(/\b\w/g, c => c.toUpperCase());
+    document.getElementById('song-title').textContent = '🎵 '+title;
+    document.title = 'PlayReal — '+title;
+    // Activate the two-panel layout and show the first chord
+    document.getElementById('upload-overlay').style.display = 'none';
+    document.body.classList.add('game-active');
+    currentIdx = 0;
+    heldMidis  = new Set();
+    showChord(0);
+  } catch (err) {
+    console.error(err);
+    setUploadError('Could not parse PDF: '+(err.message||err)+'. Is this an iReal Pro chord sheet?');
+  }
+}
+
+const dropZone = document.getElementById('drop-zone');
+const pdfInput = document.getElementById('pdf-input');
+
+dropZone.addEventListener('click', () => pdfInput.click());
+pdfInput.addEventListener('change', e => handlePDFFile(e.target.files[0]));
+
+dropZone.addEventListener('dragover',  e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+dropZone.addEventListener('dragleave', ()=> dropZone.classList.remove('dragover'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault(); dropZone.classList.remove('dragover');
+  handlePDFFile(e.dataTransfer.files[0]);
+});
+
+// ── Bootstrap ─────────────────────────────────────────────────────────────────
+function init() {
+  initMidi();
+  // Game starts only after a PDF is uploaded; upload overlay stays visible.
+}
+
+init();
+</script>
+</body>
+</html>
