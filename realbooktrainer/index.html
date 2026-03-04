@@ -569,17 +569,15 @@ async function parsePDFFile(file) {
     const slash     = slashIdx >= 0 ? chordStr.slice(slashIdx) : '';  // e.g. '/G'
 
     // Canvas bounds for the bar cell containing this diagram.
-    // x bounds are keyboard-width-based (small margin around the actual keyboard),
-    // not the full column-spacing span, to avoid wide blank margins on each side.
-    // y1 extends above the keyboard to include the chord-name text line;
+    // y1 extends above the keyboard area to include the chord-name line;
     // y2 adds a small margin below the bottom of the keyboard.
+    const cell = (barCells.length > 0)
+      ? (barCells.find(c => c.cx === d.col) || barCells[0])
+      : {x1: 0, x2: cvs.width};
     const pdfBounds = {
-      // 0.60 ≈ 0.50 (half gray-bar) + 10% left margin
-      x1: Math.max(0,          Math.round(d.col - grayW * 0.60)),
-      // 0.65 > 0.568 (keyboard right edge) + small right margin
-      x2: Math.min(cvs.width,  Math.round(d.col + grayW * 0.65)),
-      // 2.7 leaves enough room above the keyboard for the chord-name text
-      y1: Math.max(0,          Math.round(d.cy - grayH * 2.7)),
+      x1: Math.max(0,          Math.round(cell.x1)),
+      x2: Math.min(cvs.width,  Math.round(cell.x2)),
+      y1: Math.max(0,          Math.round(d.cy - grayH * 2.2)),
       y2: Math.min(cvs.height, Math.round(d.cy + grayH * 0.8)),
     };
 
